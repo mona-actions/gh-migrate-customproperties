@@ -4,6 +4,7 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"mona-actions/gh-migrate-customproperties/pkg/sync"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -14,12 +15,9 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "gh-migrate-customproperties",
 	Short: "help migrate repo custom properties",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-this CLI extension is used for....
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Long: `This is a migration CLI extension that can provides additional capabilities to migrate
+	repositories with custom properties from one organization to another.
+	`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
@@ -30,13 +28,15 @@ to quickly create a Cobra application.`,
 		sourceToken := cmd.Flag("source-token").Value.String()
 		targetToken := cmd.Flag("target-token").Value.String()
 		ghHostname := cmd.Flag("source-hostname").Value.String()
+		repositoryList := cmd.Flag("repository-list").Value.String()
 
 		// Set ENV variables
-		os.Setenv("GHET_SOURCE_ORGANIZATION", sourceOrganization)
-		os.Setenv("GHET_TARGET_ORGANIZATION", targetOrganization)
-		os.Setenv("GHET_SOURCE_TOKEN", sourceToken)
-		os.Setenv("GHET_TARGET_TOKEN", targetToken)
-		os.Setenv("GHET_SOURCE_HOSTNAME", ghHostname)
+		os.Setenv("GHMC_SOURCE_ORGANIZATION", sourceOrganization)
+		os.Setenv("GHMC_TARGET_ORGANIZATION", targetOrganization)
+		os.Setenv("GHMC_SOURCE_TOKEN", sourceToken)
+		os.Setenv("GHMC_TARGET_TOKEN", targetToken)
+		os.Setenv("GHMC_SOURCE_HOSTNAME", ghHostname)
+		os.Setenv("GHMC_REPOSITORY_LIST", repositoryList)
 
 		// Bind ENV variables in Viper
 		viper.BindEnv("SOURCE_ORGANIZATION")
@@ -44,6 +44,8 @@ to quickly create a Cobra application.`,
 		viper.BindEnv("SOURCE_TOKEN")
 		viper.BindEnv("TARGET_TOKEN")
 		viper.BindEnv("SOURCE_HOSTNAME")
+		viper.BindEnv("REPOSITORY_LIST")
+
 		viper.BindEnv("SOURCE_PRIVATE_KEY")
 		viper.BindEnv("SOURCE_APP_ID")
 		viper.BindEnv("SOURCE_INSTALLATION_ID")
@@ -51,7 +53,7 @@ to quickly create a Cobra application.`,
 		viper.BindEnv("TARGET_APP_ID")
 		viper.BindEnv("TARGET_INSTALLATION_ID")
 
-		//sync.SyncProperties()
+		sync.SyncRepositoryProperties()
 	},
 }
 
@@ -86,6 +88,8 @@ func init() {
 
 	rootCmd.Flags().StringP("source-hostname", "u", "", "GitHub Enterprise source hostname url (optional) Ex. https://github.example.com")
 
+	rootCmd.Flags().StringP("repository-list", "r", "", "File containing list of repositories to sync properties from. One repository per line. Ex. reponame")
+	rootCmd.MarkFlagRequired("repository-list")
 	viper.SetEnvPrefix("GHMC") // GHMigrateCustomProperties
 
 	// Read in environment variables that match

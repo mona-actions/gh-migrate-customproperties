@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gofri/go-github-ratelimit/github_ratelimit"
-	"github.com/google/go-github/v62/github"
+	"github.com/google/go-github/v66/github"
 	"github.com/jferrl/go-githubauth"
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/viper"
@@ -26,48 +26,60 @@ type ClientConfig struct {
 	InstallationID int64
 }
 
-// getSourceClient returns a client configured for the source GitHub instance
-func getSourceClient() *github.Client {
-	return newGitHubClient(ClientConfig{
+// GitHubAPI holds the clients for interacting with GitHub
+type GitHubAPI struct {
+	sourceClient      *github.Client
+	targetClient      *github.Client
+	sourceGraphClient *RateLimitAwareGraphQLClient
+	targetGraphClient *RateLimitAwareGraphQLClient
+}
+
+// Package-level instance of GitHubAPI
+var defaultAPI *GitHubAPI
+
+// GetAPI returns the default GitHubAPI instance, initializing it if necessary
+func GetAPI() *GitHubAPI {
+	if defaultAPI == nil {
+		defaultAPI = NewGitHubAPI()
+	}
+	return defaultAPI
+}
+
+// For testing purposes - allows resetting the default API
+func resetAPI() {
+	defaultAPI = nil
+}
+
+// newGitHubAPI creates a new GitHubAPI instance with configured clients
+// Now private since we want to control initialization through GetAPI()
+func NewGitHubAPI() *GitHubAPI {
+	sourceConfig := ClientConfig{
 		Token:          viper.GetString("SOURCE_TOKEN"),
 		Hostname:       viper.GetString("SOURCE_HOSTNAME"),
 		AppID:          viper.GetString("SOURCE_APP_ID"),
 		PrivateKey:     []byte(viper.GetString("SOURCE_PRIVATE_KEY")),
 		InstallationID: viper.GetInt64("SOURCE_INSTALLATION_ID"),
-	})
-}
+	}
 
-// getTargetClient returns a client configured for the target GitHub instance
-func getTargetClient() *github.Client {
-	return newGitHubClient(ClientConfig{
+	targetConfig := ClientConfig{
 		Token:          viper.GetString("TARGET_TOKEN"),
 		Hostname:       viper.GetString("TARGET_HOSTNAME"),
 		AppID:          viper.GetString("TARGET_APP_ID"),
 		PrivateKey:     []byte(viper.GetString("TARGET_PRIVATE_KEY")),
 		InstallationID: viper.GetInt64("TARGET_INSTALLATION_ID"),
-	})
-}
+	}
 
-// getSourceGraphQLClient returns a GraphQL client configured for the source GitHub instance
-func getSourceGraphQLClient() *RateLimitAwareGraphQLClient {
-	return newGitHubGraphQLClient(ClientConfig{
-		Token:          viper.GetString("SOURCE_TOKEN"),
-		Hostname:       viper.GetString("SOURCE_HOSTNAME"),
-		AppID:          viper.GetString("SOURCE_APP_ID"),
-		PrivateKey:     []byte(viper.GetString("SOURCE_PRIVATE_KEY")),
-		InstallationID: viper.GetInt64("SOURCE_INSTALLATION_ID"),
-	})
-}
+	sourceClient := newGitHubClient(sourceConfig)
+	targetClient := newGitHubClient(targetConfig)
+	sourceGraphClient := newGitHubGraphQLClient(sourceConfig)
+	targetGraphClient := newGitHubGraphQLClient(targetConfig)
 
-// getTargetGraphQLClient returns a GraphQL client configured for the target GitHub instance
-func getTargetGraphQLClient() *RateLimitAwareGraphQLClient {
-	return newGitHubGraphQLClient(ClientConfig{
-		Token:          viper.GetString("TARGET_TOKEN"),
-		Hostname:       viper.GetString("TARGET_HOSTNAME"),
-		AppID:          viper.GetString("TARGET_APP_ID"),
-		PrivateKey:     []byte(viper.GetString("TARGET_PRIVATE_KEY")),
-		InstallationID: viper.GetInt64("TARGET_INSTALLATION_ID"),
-	})
+	return &GitHubAPI{
+		sourceClient:      sourceClient,
+		targetClient:      targetClient,
+		sourceGraphClient: sourceGraphClient,
+		targetGraphClient: targetGraphClient,
+	}
 }
 
 // createAuthenticatedClient creates an HTTP client with proper authentication and rate limiting
@@ -185,16 +197,42 @@ func (c *RateLimitAwareGraphQLClient) Query(ctx context.Context, q interface{}, 
 			// Sleep until rate limit resets
 			log.Println("Rate limit exceeded, sleeping until reset at:", rateLimitQuery.RateLimit.ResetAt.Time)
 			time.Sleep(time.Until(rateLimitQuery.RateLimit.ResetAt.Time))
-
 		}
 	}
 }
 
-func GetSourceAuthenticatedUser() (*github.User, error) {
-	client := getSourceClient()
+func (api *GitHubAPI) GetRepositoryProperties(owner, repo string) ([]*github.CustomPropertyValue, error) {
 	ctx := context.Background()
 
-	user, _, err := client.Users.Get(ctx, "")
+	repoInfo, _, err := api.sourceClient.Repositories.GetAllCustomPropertyValues(ctx, owner, repo)
+	if err != nil {
+		if strings.Contains(err.Error(), "403 Resource not accessible by integration") {
+			return nil, err
+		}
+		return nil, err
+	}
+
+	return repoInfo, nil
+}
+
+func (api *GitHubAPI) CreateRepositoryProperties(owner, repo string, properties []*github.CustomPropertyValue) error {
+	ctx := context.Background()
+
+	_, err := api.targetClient.Repositories.CreateOrUpdateCustomProperties(ctx, owner, repo, properties)
+	if err != nil {
+		if strings.Contains(err.Error(), "403 Resource not accessible by integration") {
+			return err
+		}
+		return err
+	}
+
+	return nil
+}
+
+func (api *GitHubAPI) GetSourceAuthenticatedUser() (*github.User, error) {
+	ctx := context.Background()
+
+	user, _, err := api.sourceClient.Users.Get(ctx, "")
 	if err != nil {
 		if strings.Contains(err.Error(), "403 Resource not accessible by integration") {
 			return nil, err
@@ -204,11 +242,10 @@ func GetSourceAuthenticatedUser() (*github.User, error) {
 	return user, nil
 }
 
-func GetTargetAuthenticatedUser() (*github.User, error) {
-	client := getTargetClient()
+func (api *GitHubAPI) GetTargetAuthenticatedUser() (*github.User, error) {
 	ctx := context.Background()
 
-	user, _, err := client.Users.Get(ctx, "")
+	user, _, err := api.targetClient.Users.Get(ctx, "")
 	if err != nil {
 		if strings.Contains(err.Error(), "403 Resource not accessible by integration") {
 			return nil, nil
@@ -218,8 +255,7 @@ func GetTargetAuthenticatedUser() (*github.User, error) {
 	return user, nil
 }
 
-func GetSourceGraphQLAuthenticatedUser() (*github.User, error) {
-	client := getSourceGraphQLClient()
+func (api *GitHubAPI) GetSourceGraphQLAuthenticatedUser() (*github.User, error) {
 	ctx := context.Background()
 
 	var query struct {
@@ -229,7 +265,7 @@ func GetSourceGraphQLAuthenticatedUser() (*github.User, error) {
 		}
 	}
 
-	err := client.Query(ctx, &query, nil)
+	err := api.sourceGraphClient.Query(ctx, &query, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -242,8 +278,7 @@ func GetSourceGraphQLAuthenticatedUser() (*github.User, error) {
 	return user, nil
 }
 
-func GetTargetGraphQLAuthenticatedUser() (*github.User, error) {
-	client := getTargetGraphQLClient()
+func (api *GitHubAPI) GetTargetGraphQLAuthenticatedUser() (*github.User, error) {
 	ctx := context.Background()
 
 	var query struct {
@@ -253,7 +288,7 @@ func GetTargetGraphQLAuthenticatedUser() (*github.User, error) {
 		}
 	}
 
-	err := client.Query(ctx, &query, nil)
+	err := api.targetGraphClient.Query(ctx, &query, nil)
 	if err != nil {
 		return nil, err
 	}
