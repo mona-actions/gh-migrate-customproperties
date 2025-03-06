@@ -1,6 +1,7 @@
 # gh-migrate-customproperties
 
-A GitHub CLI extension that helps migrate repository custom properties from one organization to another. It supports both GitHub.com and GitHub Enterprise Server environments for source.
+A GitHub CLI extension that helps migrate repository custom properties from one organization to another. It supports both GitHub.com and GitHub Enterprise Server environments.
+
 
 ## Installation
 
@@ -22,20 +23,26 @@ gh extension upgrade gh-migrate-customproperties
 gh migrate-customproperties [flags]
 
 Flags:
-  -s, --source-organization string   Source Organization to sync custom properties from
-  -t, --target-organization string   Target Organization to sync custom properties to
+  -t, --target-organization string   Target Organization to sync properties to
   -a, --source-token string         Source Organization GitHub token. Required scopes: read:org, read:user, user:email
   -b, --target-token string         Target Organization GitHub token. Required scopes: admin:org
   -u, --source-hostname string      GitHub Enterprise source hostname url (optional) Ex. https://github.example.com
   -r, --repository-list string      File containing list of repositories to sync properties from. One repository per line.
 ```
 
-### Example repository list file format
+### Repository List Format
 
-The repository list file (`--repository-list`) should contain one repository per line and supports the following formats:
-- Full URLs: `https://github.com/org/repo1` (the `source-organization` and `source-hostname` value will be used for the org and hostname respectively)
-- Simple org/repo format: `org/repo1` (the `source-organization` value will be used for the org)
-- Just repository names: `repo1`
+The repository list file (`--repository-list`) must contain repositories in either of these formats:
+- Full URLs: `https://github.com/owner/repo`
+- Owner/repo format: `owner/repo`
+
+Example repository list:
+```
+octocat/Hello-World
+https://github.com/mona/awesome-project
+```
+
+Note: Simple repository names without owner are no longer supported. Each entry must specify both the owner and repository name.
 
 ## License
 

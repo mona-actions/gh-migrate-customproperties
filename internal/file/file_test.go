@@ -17,7 +17,7 @@ func TestParseRepositoryFile(t *testing.T) {
 		{
 			name:      "valid repositories with full URLs",
 			content:   "https://github.com/org/repo1\nhttps://github.com/org/repo2\nhttps://github.com/different-org/repo3",
-			wantRepos: []string{"repo1", "repo2", "repo3"},
+			wantRepos: []string{"org/repo1", "org/repo2", "different-org/repo3"},
 			wantErr:   false,
 		},
 		{
@@ -32,25 +32,20 @@ func TestParseRepositoryFile(t *testing.T) {
 			content:     "https://github.com/org/repo1\n:invalid:\nhttps://github.com/org/repo3",
 			wantRepos:   nil,
 			wantErr:     true,
-			errContains: "invalid URI",
+			errContains: "invalid repository format",
 		},
 		{
 			name:      "simple owner/repo format",
 			content:   "org/repo1\nother-org/repo2",
-			wantRepos: []string{"repo1", "repo2"},
+			wantRepos: []string{"org/repo1", "other-org/repo2"},
 			wantErr:   false,
 		},
 		{
-			name:      "mixed formats",
-			content:   "org/repo1\nhttps://github.com/org/repo2\nrepo3",
-			wantRepos: []string{"repo1", "repo2", "repo3"},
-			wantErr:   false,
-		},
-		{
-			name:      "just repo names",
-			content:   "repo1\nrepo2\nrepo3",
-			wantRepos: []string{"repo1", "repo2", "repo3"},
-			wantErr:   false,
+			name:        "repository without owner",
+			content:     "repo1\nrepo2\nrepo3",
+			wantRepos:   nil,
+			wantErr:     true,
+			errContains: "must be in the format 'owner/repo'",
 		},
 	}
 

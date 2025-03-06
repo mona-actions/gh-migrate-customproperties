@@ -15,15 +15,11 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "gh-migrate-customproperties",
 	Short: "help migrate repo custom properties",
-	Long: `This is a migration CLI extension that can provides additional capabilities to migrate
+	Long: `This is a migration CLI extension that provides additional capabilities to migrate
 	repositories with custom properties from one organization to another.
 	`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
-
 		// Get parameters
-		sourceOrganization := cmd.Flag("source-organization").Value.String()
 		targetOrganization := cmd.Flag("target-organization").Value.String()
 		sourceToken := cmd.Flag("source-token").Value.String()
 		targetToken := cmd.Flag("target-token").Value.String()
@@ -31,7 +27,6 @@ var rootCmd = &cobra.Command{
 		repositoryList := cmd.Flag("repository-list").Value.String()
 
 		// Set ENV variables
-		os.Setenv("GHMC_SOURCE_ORGANIZATION", sourceOrganization)
 		os.Setenv("GHMC_TARGET_ORGANIZATION", targetOrganization)
 		os.Setenv("GHMC_SOURCE_TOKEN", sourceToken)
 		os.Setenv("GHMC_TARGET_TOKEN", targetToken)
@@ -39,7 +34,6 @@ var rootCmd = &cobra.Command{
 		os.Setenv("GHMC_REPOSITORY_LIST", repositoryList)
 
 		// Bind ENV variables in Viper
-		viper.BindEnv("SOURCE_ORGANIZATION")
 		viper.BindEnv("TARGET_ORGANIZATION")
 		viper.BindEnv("SOURCE_TOKEN")
 		viper.BindEnv("TARGET_TOKEN")
@@ -73,11 +67,7 @@ func init() {
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-
-	rootCmd.Flags().StringP("source-organization", "s", "", "Source Organization to sync teams from")
-	rootCmd.MarkFlagRequired("source-organization")
-
-	rootCmd.Flags().StringP("target-organization", "t", "", "Target Organization to sync teams from")
+	rootCmd.Flags().StringP("target-organization", "t", "", "Target Organization to sync properties to")
 	rootCmd.MarkFlagRequired("target-organization")
 
 	rootCmd.Flags().StringP("source-token", "a", "", "Source Organization GitHub token. Scopes: read:org, read:user, user:email")
@@ -88,8 +78,9 @@ func init() {
 
 	rootCmd.Flags().StringP("source-hostname", "u", "", "GitHub Enterprise source hostname url (optional) Ex. https://github.example.com")
 
-	rootCmd.Flags().StringP("repository-list", "r", "", "File containing list of repositories to sync properties from. One repository per line. Ex. reponame")
+	rootCmd.Flags().StringP("repository-list", "r", "", "File containing list of repositories to sync properties from. One repository per line. Must be in owner/repo format.")
 	rootCmd.MarkFlagRequired("repository-list")
+
 	viper.SetEnvPrefix("GHMC") // GHMigrateCustomProperties
 
 	// Read in environment variables that match

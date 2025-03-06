@@ -19,46 +19,36 @@ func ParseRepositoryFile(filename string) ([]string, error) {
 	scanner := bufio.NewScanner(file)
 	lineCount := 0
 	for scanner.Scan() {
-		line := scanner.Text()
+		line := strings.TrimSpace(scanner.Text())
 		lineCount++
 		if line == "" {
 			continue
 		}
 
-		var repoName string
-		if strings.Contains(line, ":") && !strings.HasPrefix(line, "http://") && !strings.HasPrefix(line, "https://") {
-			return nil, fmt.Errorf("invalid URI on line %d: %s", lineCount, line)
-		}
-
-		if strings.Contains(line, "/") {
-			if strings.HasPrefix(line, "http://") || strings.HasPrefix(line, "https://") {
-				u, err := url.Parse(line)
-				if err != nil {
-					return nil, fmt.Errorf("invalid URI on line %d: %v", lineCount, err)
-				}
-				parts := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
-				if len(parts) > 1 {
-					repoName = parts[len(parts)-1]
-				} else {
-					return nil, fmt.Errorf("invalid URI on line %d: missing repository name", lineCount)
-				}
-			} else {
-				// Handle simple owner/repo format
-				parts := strings.Split(line, "/")
-				if len(parts) > 1 {
-					repoName = parts[len(parts)-1]
-				} else {
-					return nil, fmt.Errorf("invalid repository format on line %d: must be owner/repo", lineCount)
-				}
+		var fullRepo string
+		if strings.HasPrefix(line, "http://") || strings.HasPrefix(line, "https://") {
+			// Handle full GitHub URLs
+			u, err := url.Parse(line)
+			if err != nil {
+				return nil, fmt.Errorf("invalid URI on line %d: %v", lineCount, err)
 			}
+			parts := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("invalid repository format on line %d: URL must be in the format 'https://github.com/owner/repo'", lineCount)
+			}
+			fullRepo = fmt.Sprintf("%s/%s", parts[0], parts[1])
+		} else if strings.Contains(line, "/") {
+			// Handle owner/repo format
+			parts := strings.Split(line, "/")
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("invalid repository format on line %d: must be in the format 'owner/repo'", lineCount)
+			}
+			fullRepo = line
 		} else {
-			// If no slash, assume it's just a repo name
-			repoName = line
+			return nil, fmt.Errorf("invalid repository format on line %d: must be in the format 'owner/repo' or full GitHub URL", lineCount)
 		}
 
-		if repoName != "" {
-			repos = append(repos, repoName)
-		}
+		repos = append(repos, fullRepo)
 	}
 
 	if err := scanner.Err(); err != nil {
