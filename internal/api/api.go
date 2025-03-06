@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gofri/go-github-ratelimit/github_ratelimit"
-	"github.com/google/go-github/v62/github"
+	"github.com/google/go-github/v66/github"
 	"github.com/jferrl/go-githubauth"
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/viper"
