@@ -5,6 +5,7 @@ import (
 	"log"
 	"mona-actions/gh-migrate-customproperties/internal/api"
 	"mona-actions/gh-migrate-customproperties/internal/file"
+	"strings"
 
 	"github.com/google/go-github/v66/github"
 	"github.com/pterm/pterm"
@@ -40,7 +41,6 @@ func NewRepositoryProperties() *RepositoryProperties {
 }
 
 func SyncRepositoryProperties() {
-
 	initializeAPI()
 
 	spinner, _ := pterm.DefaultSpinner.Start("Syncing repository properties")
@@ -59,7 +59,6 @@ func SyncRepositoryProperties() {
 	repoProps := NewRepositoryProperties()
 
 	if err := fetchProperties(repoProps, repositories, stats); err != nil {
-		// Log the error but continue
 		spinner.WarningPrinter.Println("Error during fetch phase... continuing")
 	}
 
@@ -68,38 +67,37 @@ func SyncRepositoryProperties() {
 
 	// Create properties in target
 	if err := createProperties(repoProps, targetOwner, stats); err != nil {
-		// Log the error but continue
 		log.Printf("Error during create phase: %v", err)
 	}
 
 	if len(stats.CreateFailures) > 0 && stats.SuccessfulCreate > 0 {
-		spinner.Warning("Some repository properties failed to sync ")
+		spinner.Warning("Some repository properties failed to sync")
 	} else if len(stats.CreateFailures) > 0 {
 		spinner.Fail("All repositories failed to sync properties")
 	} else {
 		spinner.Success("All repository properties synced successfully")
 	}
 	printSyncSummary(stats)
-
 }
 
 // fetchProperties fetches properties for all repositories and tracks stats
 func fetchProperties(rp *RepositoryProperties, repositories []string, stats *SyncStats) error {
-	owner := viper.GetString("SOURCE_ORGANIZATION")
+	for _, fullRepo := range repositories {
+		parts := strings.Split(fullRepo, "/")
+		owner, repoName := parts[0], parts[1]
 
-	for _, repo := range repositories {
-		props, err := ghAPI.GetRepositoryProperties(owner, repo)
+		props, err := ghAPI.GetRepositoryProperties(owner, repoName)
 		if err != nil {
-			log.Printf("Error fetching repository properties for repo %s: %v", repo, err)
-			stats.FetchFailures = append(stats.FetchFailures, repo)
+			log.Printf("Error fetching repository properties for %s: %v", fullRepo, err)
+			stats.FetchFailures = append(stats.FetchFailures, fullRepo)
 			continue
 		}
 		if props == nil {
-			log.Printf("No repository properties found for repo %s", repo)
+			log.Printf("No repository properties found for %s", fullRepo)
 			continue
 		}
 
-		rp.Repositories[repo] = props
+		rp.Repositories[repoName] = props
 		stats.SuccessfulFetch++
 	}
 
@@ -108,11 +106,11 @@ func fetchProperties(rp *RepositoryProperties, repositories []string, stats *Syn
 
 // createProperties creates all stored properties in target repositories and tracks stats
 func createProperties(rp *RepositoryProperties, targetOwner string, stats *SyncStats) error {
-	for repo, props := range rp.Repositories {
-		err := ghAPI.CreateRepositoryProperties(targetOwner, repo, props)
+	for repoName, props := range rp.Repositories {
+		err := ghAPI.CreateRepositoryProperties(targetOwner, repoName, props)
 		if err != nil {
-			log.Printf("Failed to create properties for repo %s: %v", repo, err)
-			stats.CreateFailures = append(stats.CreateFailures, repo)
+			log.Printf("Failed to create properties for repo %s: %v", repoName, err)
+			stats.CreateFailures = append(stats.CreateFailures, repoName)
 			continue
 		}
 		stats.SuccessfulCreate++
