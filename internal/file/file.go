@@ -17,13 +17,48 @@ func ParseRepositoryFile(filename string) ([]string, error) {
 
 	var repos []string
 	scanner := bufio.NewScanner(file)
+	lineCount := 0
 	for scanner.Scan() {
-		u, err := url.Parse(scanner.Text())
-		if err != nil {
-			return nil, err
+		line := scanner.Text()
+		lineCount++
+		if line == "" {
+			continue
 		}
-		repo := strings.TrimPrefix(u.Path, "/") // format to owner/reponame
-		repos = append(repos, repo)
+
+		var repoName string
+		if strings.Contains(line, ":") && !strings.HasPrefix(line, "http://") && !strings.HasPrefix(line, "https://") {
+			return nil, fmt.Errorf("invalid URI on line %d: %s", lineCount, line)
+		}
+
+		if strings.Contains(line, "/") {
+			if strings.HasPrefix(line, "http://") || strings.HasPrefix(line, "https://") {
+				u, err := url.Parse(line)
+				if err != nil {
+					return nil, fmt.Errorf("invalid URI on line %d: %v", lineCount, err)
+				}
+				parts := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
+				if len(parts) > 1 {
+					repoName = parts[len(parts)-1]
+				} else {
+					return nil, fmt.Errorf("invalid URI on line %d: missing repository name", lineCount)
+				}
+			} else {
+				// Handle simple owner/repo format
+				parts := strings.Split(line, "/")
+				if len(parts) > 1 {
+					repoName = parts[len(parts)-1]
+				} else {
+					return nil, fmt.Errorf("invalid repository format on line %d: must be owner/repo", lineCount)
+				}
+			}
+		} else {
+			// If no slash, assume it's just a repo name
+			repoName = line
+		}
+
+		if repoName != "" {
+			repos = append(repos, repoName)
+		}
 	}
 
 	if err := scanner.Err(); err != nil {

@@ -52,7 +52,7 @@ func SyncRepositoryProperties() {
 	// Initialize and fetch properties
 	repositories, err := file.ParseRepositoryFile(viper.GetString("REPOSITORY_LIST"))
 	if err != nil {
-		spinner.Fail("Failed to parse repository list")
+		spinner.Fail(err.Error())
 	}
 
 	stats.TotalProcessed = len(repositories)
