@@ -15,12 +15,9 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "gh-migrate-customproperties",
 	Short: "help migrate repo custom properties",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-this CLI extension is used for....
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Long: `This is a migration CLI extension that can provides additional capabilities to migrate
+	repositories with custom properties from one organization to another.
+	`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
