@@ -6,7 +6,7 @@ import (
 	"mona-actions/gh-migrate-customproperties/internal/api"
 	"mona-actions/gh-migrate-customproperties/internal/file"
 
-	"github.com/google/go-github/v62/github"
+	"github.com/google/go-github/v66/github"
 	"github.com/pterm/pterm"
 	"github.com/spf13/viper"
 )
@@ -16,6 +16,15 @@ var ghAPI *api.GitHubAPI
 
 func initializeAPI() {
 	ghAPI = api.GetAPI()
+}
+
+// SyncStats tracks statistics about the sync operation
+type SyncStats struct {
+	FetchFailures    []string
+	CreateFailures   []string
+	TotalProcessed   int
+	SuccessfulFetch  int
+	SuccessfulCreate int
 }
 
 // RepositoryProperties stores custom properties for all repositories
@@ -30,43 +39,59 @@ func NewRepositoryProperties() *RepositoryProperties {
 	}
 }
 
-func SyncRepositoryProperties() error {
+func SyncRepositoryProperties() {
 
 	initializeAPI()
 
 	spinner, _ := pterm.DefaultSpinner.Start("Syncing repository properties")
 	spinner.UpdateText("Retrieving source custom properties from repositories")
 
+	// Initialize sync stats
+	stats := &SyncStats{}
+
 	// Initialize and fetch properties
 	repositories, err := file.ParseRepositoryFile(viper.GetString("REPOSITORY_LIST"))
 	if err != nil {
-		return err
+		spinner.Fail("Failed to parse repository list")
 	}
 
+	stats.TotalProcessed = len(repositories)
 	repoProps := NewRepositoryProperties()
-	if err := repoProps.FetchProperties(repositories); err != nil {
-		return err
+
+	if err := fetchProperties(repoProps, repositories, stats); err != nil {
+		// Log the error but continue
+		spinner.WarningPrinter.Println("Error during fetch phase... continuing")
 	}
 
 	spinner.UpdateText("Creating properties in target repositories")
 	targetOwner := viper.GetString("TARGET_ORGANIZATION")
 
 	// Create properties in target
-	if err := repoProps.CreateProperties(targetOwner); err != nil {
-		return err
+	if err := createProperties(repoProps, targetOwner, stats); err != nil {
+		// Log the error but continue
+		log.Printf("Error during create phase: %v", err)
 	}
 
-	spinner.Success("Repository properties synced successfully")
-	return nil
+	if len(stats.CreateFailures) > 0 && stats.SuccessfulCreate > 0 {
+		spinner.Warning("Some repository properties failed to sync ")
+	} else if len(stats.CreateFailures) > 0 {
+		spinner.Fail("All repositories failed to sync properties")
+	} else {
+		spinner.Success("All repository properties synced successfully")
+	}
+	printSyncSummary(stats)
+
 }
 
-func (rp *RepositoryProperties) FetchProperties(repositories []string) error {
+// fetchProperties fetches properties for all repositories and tracks stats
+func fetchProperties(rp *RepositoryProperties, repositories []string, stats *SyncStats) error {
 	owner := viper.GetString("SOURCE_ORGANIZATION")
 
 	for _, repo := range repositories {
 		props, err := ghAPI.GetRepositoryProperties(owner, repo)
 		if err != nil {
 			log.Printf("Error fetching repository properties for repo %s: %v", repo, err)
+			stats.FetchFailures = append(stats.FetchFailures, repo)
 			continue
 		}
 		if props == nil {
@@ -75,18 +100,43 @@ func (rp *RepositoryProperties) FetchProperties(repositories []string) error {
 		}
 
 		rp.Repositories[repo] = props
+		stats.SuccessfulFetch++
 	}
 
 	return nil
 }
 
-// CreateProperties creates all stored properties in target repositories
-func (rp *RepositoryProperties) CreateProperties(targetOwner string) error {
+// createProperties creates all stored properties in target repositories and tracks stats
+func createProperties(rp *RepositoryProperties, targetOwner string, stats *SyncStats) error {
 	for repo, props := range rp.Repositories {
 		err := ghAPI.CreateRepositoryProperties(targetOwner, repo, props)
 		if err != nil {
-			return fmt.Errorf("failed to create properties for repo %s: %v", repo, err)
+			log.Printf("Failed to create properties for repo %s: %v", repo, err)
+			stats.CreateFailures = append(stats.CreateFailures, repo)
+			continue
 		}
+		stats.SuccessfulCreate++
 	}
 	return nil
+}
+
+func printSyncSummary(stats *SyncStats) {
+	fmt.Printf("\n=== Sync Operation Summary ===\n")
+	fmt.Printf("📊 Total repositories processed: %d\n", stats.TotalProcessed)
+	fmt.Printf("✅ Successfully fetched: %d\n", stats.SuccessfulFetch)
+	fmt.Printf("✅ Successfully created: %d\n", stats.SuccessfulCreate)
+
+	if len(stats.FetchFailures) > 0 {
+		fmt.Printf("\n❌ Repositories that failed during fetch (%d):\n", len(stats.FetchFailures))
+		for _, repo := range stats.FetchFailures {
+			fmt.Printf("  - %s\n", repo)
+		}
+	}
+
+	if len(stats.CreateFailures) > 0 {
+		fmt.Printf("\n❌ Repositories that failed during create (%d):\n", len(stats.CreateFailures))
+		for _, repo := range stats.CreateFailures {
+			fmt.Printf("  - %s\n", repo)
+		}
+	}
 }
