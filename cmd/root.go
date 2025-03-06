@@ -35,7 +35,7 @@ var rootCmd = &cobra.Command{
 		os.Setenv("GHMC_TARGET_ORGANIZATION", targetOrganization)
 		os.Setenv("GHMC_SOURCE_TOKEN", sourceToken)
 		os.Setenv("GHMC_TARGET_TOKEN", targetToken)
-		os.Setenv("GHM_SOURCE_HOSTNAME", ghHostname)
+		os.Setenv("GHMC_SOURCE_HOSTNAME", ghHostname)
 		os.Setenv("GHMC_REPOSITORY_LIST", repositoryList)
 
 		// Bind ENV variables in Viper
