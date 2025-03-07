@@ -106,12 +106,28 @@ func fetchProperties(rp *RepositoryProperties, repositories []string, stats *Syn
 
 // createProperties creates all stored properties in target repositories and tracks stats
 func createProperties(rp *RepositoryProperties, targetOwner string, stats *SyncStats) error {
+	convertProps := viper.GetBool("CONVERT_PROPS")
 	for repoName, props := range rp.Repositories {
 		err := ghAPI.CreateRepositoryProperties(targetOwner, repoName, props)
 		if err != nil {
-			log.Printf("Failed to create properties for repo %s: %v", repoName, err)
-			stats.CreateFailures = append(stats.CreateFailures, repoName)
-			continue
+			if strings.Contains(err.Error(), "value must be a list of strings []") && convertProps {
+				// Extract property name from error message
+				propName := extractPropertyName(err.Error())
+				if propName != "" {
+					// Convert only the failed property to multi-select format
+					props = convertPropertyValue(props, propName)
+					err = ghAPI.CreateRepositoryProperties(targetOwner, repoName, props)
+					if err != nil {
+						log.Printf("Failed to create properties for repo %s after conversion: %v", repoName, err)
+						stats.CreateFailures = append(stats.CreateFailures, repoName)
+						continue
+					}
+				}
+			} else {
+				log.Printf("Failed to create properties for repo %s: %v", repoName, err)
+				stats.CreateFailures = append(stats.CreateFailures, repoName)
+				continue
+			}
 		}
 		stats.SuccessfulCreate++
 	}
@@ -137,4 +153,43 @@ func printSyncSummary(stats *SyncStats) {
 			fmt.Printf("  - %s\n", repo)
 		}
 	}
+}
+
+// convertPropertyValue converts single-select values to multi-select format for a specific property
+func convertPropertyValue(props []*github.CustomPropertyValue, failedPropName string) []*github.CustomPropertyValue {
+	convertedProps := make([]*github.CustomPropertyValue, 0, len(props))
+
+	for _, prop := range props {
+		convertedProp := &github.CustomPropertyValue{
+			PropertyName: prop.PropertyName,
+		}
+
+		// Only convert the property that failed
+		if prop.PropertyName == failedPropName && prop.Value != nil {
+			if strValue, ok := prop.Value.(string); ok {
+				// Convert to multi-select format
+				convertedProp.Value = []string{strValue}
+				log.Printf("Converting property %q from single-select to multi-select", failedPropName)
+			} else {
+				convertedProp.Value = prop.Value
+			}
+		} else {
+			// Keep other properties as is
+			convertedProp.Value = prop.Value
+		}
+
+		convertedProps = append(convertedProps, convertedProp)
+	}
+
+	return convertedProps
+}
+
+// Helper function to extract property name from error message
+func extractPropertyName(errMsg string) string {
+	// Example error: "422 Property 'Domain' values must be strings"
+	matches := strings.Split(errMsg, "'")
+	if len(matches) >= 2 {
+		return strings.TrimSpace(matches[1])
+	}
+	return ""
 }

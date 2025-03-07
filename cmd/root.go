@@ -25,6 +25,7 @@ var rootCmd = &cobra.Command{
 		targetToken := cmd.Flag("target-token").Value.String()
 		ghHostname := cmd.Flag("source-hostname").Value.String()
 		repositoryList := cmd.Flag("repository-list").Value.String()
+		convertProps := cmd.Flag("convert-props").Value.String()
 
 		// Set ENV variables
 		os.Setenv("GHMC_TARGET_ORGANIZATION", targetOrganization)
@@ -32,6 +33,7 @@ var rootCmd = &cobra.Command{
 		os.Setenv("GHMC_TARGET_TOKEN", targetToken)
 		os.Setenv("GHMC_SOURCE_HOSTNAME", ghHostname)
 		os.Setenv("GHMC_REPOSITORY_LIST", repositoryList)
+		os.Setenv("GHMC_CONVERT_PROPS", convertProps)
 
 		// Bind ENV variables in Viper
 		viper.BindEnv("TARGET_ORGANIZATION")
@@ -39,6 +41,7 @@ var rootCmd = &cobra.Command{
 		viper.BindEnv("TARGET_TOKEN")
 		viper.BindEnv("SOURCE_HOSTNAME")
 		viper.BindEnv("REPOSITORY_LIST")
+		viper.BindEnv("CONVERT_PROPS")
 
 		viper.BindEnv("SOURCE_PRIVATE_KEY")
 		viper.BindEnv("SOURCE_APP_ID")
@@ -80,6 +83,8 @@ func init() {
 
 	rootCmd.Flags().StringP("repository-list", "r", "", "File containing list of repositories to sync properties from. One repository per line. Must be in owner/repo format.")
 	rootCmd.MarkFlagRequired("repository-list")
+
+	rootCmd.Flags().BoolP("convert-props", "c", false, "Convert custom properties to target format. Default: false; Currently only supports single-select to multi-select conversion")
 
 	viper.SetEnvPrefix("GHMC") // GHMigrateCustomProperties
 
