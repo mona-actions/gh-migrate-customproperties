@@ -111,17 +111,8 @@ func createProperties(rp *RepositoryProperties, targetOwner string, stats *SyncS
 		err := ghAPI.CreateRepositoryProperties(targetOwner, repoName, props)
 		if err != nil {
 			if strings.Contains(err.Error(), "value must be a list of strings []") && convertProps {
-				// Extract property name from error message
-				propName := extractPropertyName(err.Error())
-				if propName != "" {
-					// Convert only the failed property to multi-select format
-					props = convertPropertyValue(props, propName)
-					err = ghAPI.CreateRepositoryProperties(targetOwner, repoName, props)
-					if err != nil {
-						log.Printf("Failed to create properties for repo %s after conversion: %v", repoName, err)
-						stats.CreateFailures = append(stats.CreateFailures, repoName)
-						continue
-					}
+				if err := handlePropertyConversion(repoName, props, targetOwner, stats, err.Error()); err != nil {
+					continue
 				}
 			} else {
 				log.Printf("Failed to create properties for repo %s: %v", repoName, err)
@@ -192,4 +183,23 @@ func extractPropertyName(errMsg string) string {
 		return strings.TrimSpace(matches[1])
 	}
 	return ""
+}
+
+// handlePropertyConversion attempts to convert and create properties after a failure
+func handlePropertyConversion(repoName string, props []*github.CustomPropertyValue, targetOwner string, stats *SyncStats, errMsg string) error {
+	propName := extractPropertyName(errMsg)
+	if propName == "" {
+		return fmt.Errorf("could not extract property name from error")
+	}
+
+	// Convert only the failed property to multi-select format
+	convertedProps := convertPropertyValue(props, propName)
+	err := ghAPI.CreateRepositoryProperties(targetOwner, repoName, convertedProps)
+	if err != nil {
+		log.Printf("Failed to create properties for repo %s after conversion: %v", repoName, err)
+		stats.CreateFailures = append(stats.CreateFailures, repoName)
+		return err
+	}
+
+	return nil
 }
