@@ -6,6 +6,7 @@ package cmd
 import (
 	"mona-actions/gh-migrate-customproperties/pkg/sync"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -25,7 +26,7 @@ var rootCmd = &cobra.Command{
 		targetToken := cmd.Flag("target-token").Value.String()
 		ghHostname := cmd.Flag("source-hostname").Value.String()
 		repositoryList := cmd.Flag("repository-list").Value.String()
-		convertProps := cmd.Flag("convert-props").Value.String()
+		convertProps, _ := cmd.Flags().GetBool("convert-props")
 
 		// Set ENV variables
 		os.Setenv("GHMC_TARGET_ORGANIZATION", targetOrganization)
@@ -33,7 +34,7 @@ var rootCmd = &cobra.Command{
 		os.Setenv("GHMC_TARGET_TOKEN", targetToken)
 		os.Setenv("GHMC_SOURCE_HOSTNAME", ghHostname)
 		os.Setenv("GHMC_REPOSITORY_LIST", repositoryList)
-		os.Setenv("GHMC_CONVERT_PROPS", convertProps)
+		os.Setenv("GHMC_CONVERT_PROPS", strconv.FormatBool(convertProps))
 
 		// Bind ENV variables in Viper
 		viper.BindEnv("TARGET_ORGANIZATION")
